@@ -1,0 +1,318 @@
+/**
+ * Admin CSS
+ *
+ * Modern WordPress UI styling with iOS-inspired elements.
+ *
+ * @package Smart_UTM_Builder
+ */
+
+:root {
+	--smart-utm-primary: #2271b1;
+	--smart-utm-secondary: #f3f4f6;
+	--smart-utm-accent: #2ecc71;
+	--smart-utm-border: #dcdcde;
+	--smart-utm-text: #1d2327;
+	--smart-utm-text-light: #646970;
+}
+
+.smart-utm-dashboard,
+.smart-utm-templates,
+.smart-utm-presets,
+.smart-utm-settings {
+	max-width: 1200px;
+}
+
+/* Bulk Actions */
+.smart-utm-bulk-actions {
+	margin: 20px 0;
+	padding: 15px;
+	background: var(--smart-utm-secondary);
+	border-radius: 8px;
+	display: flex;
+	gap: 10px;
+}
+
+.smart-utm-bulk-actions .button {
+	border-radius: 6px;
+	font-weight: 500;
+	transition: all 0.2s ease;
+}
+
+.smart-utm-bulk-actions .button:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Filters */
+.smart-utm-filters {
+	margin: 20px 0;
+	display: flex;
+	gap: 15px;
+	align-items: center;
+}
+
+.smart-utm-filters input[type="search"],
+.smart-utm-filters select {
+	border-radius: 6px;
+	border: 1px solid var(--smart-utm-border);
+	padding: 8px 12px;
+	font-size: 14px;
+}
+
+/* Table */
+.smart-utm-dashboard table {
+	border-radius: 8px;
+	overflow: hidden;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.smart-utm-dashboard th.sortable {
+	cursor: pointer;
+	user-select: none;
+	position: relative;
+	padding-right: 25px;
+}
+
+.smart-utm-dashboard th.sortable:hover {
+	background: var(--smart-utm-secondary);
+}
+
+.smart-utm-dashboard th.sortable::after {
+	content: '⇅';
+	position: absolute;
+	right: 8px;
+	color: var(--smart-utm-text-light);
+	font-size: 12px;
+}
+
+.smart-utm-dashboard th.sortable.asc::after {
+	content: '↑';
+	color: var(--smart-utm-primary);
+}
+
+.smart-utm-dashboard th.sortable.desc::after {
+	content: '↓';
+	color: var(--smart-utm-primary);
+}
+
+.smart-utm-dashboard td {
+	vertical-align: middle;
+}
+
+.smart-utm-dashboard .utm-url {
+	font-family: monospace;
+	font-size: 12px;
+	color: var(--smart-utm-primary);
+	max-width: 400px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Copy Button */
+.smart-utm-copy-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 5px 8px;
+	color: var(--smart-utm-text-light);
+	font-size: 16px;
+	border-radius: 4px;
+	transition: all 0.2s ease;
+}
+
+.smart-utm-copy-btn:hover {
+	background: var(--smart-utm-secondary);
+	color: var(--smart-utm-primary);
+}
+
+.smart-utm-copy-btn.copied {
+	color: var(--smart-utm-accent);
+}
+
+/* Actions */
+.smart-utm-actions {
+	display: flex;
+	gap: 5px;
+}
+
+.smart-utm-actions .button {
+	padding: 4px 8px;
+	font-size: 12px;
+	height: auto;
+	line-height: 1.5;
+}
+
+/* Pagination */
+.smart-utm-pagination {
+	margin: 20px 0;
+	display: flex;
+	justify-content: center;
+	gap: 5px;
+}
+
+.smart-utm-pagination .button {
+	border-radius: 6px;
+	min-width: 36px;
+}
+
+.smart-utm-pagination .button.active {
+	background: var(--smart-utm-primary);
+	color: white;
+	border-color: var(--smart-utm-primary);
+}
+
+/* Template Editor */
+.smart-utm-templates .form-table th {
+	width: 200px;
+	font-weight: 500;
+}
+
+.smart-utm-templates input[type="text"] {
+	border-radius: 6px;
+	border: 1px solid var(--smart-utm-border);
+	padding: 8px 12px;
+	transition: border-color 0.2s ease;
+}
+
+.smart-utm-templates input[type="text"]:focus {
+	border-color: var(--smart-utm-primary);
+	outline: none;
+	box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.1);
+}
+
+/* Presets */
+.smart-utm-presets-list {
+	margin: 20px 0;
+}
+
+.smart-utm-preset-item {
+	background: white;
+	border: 1px solid var(--smart-utm-border);
+	border-radius: 8px;
+	padding: 15px;
+	margin-bottom: 15px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	transition: box-shadow 0.2s ease;
+}
+
+.smart-utm-preset-item:hover {
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.smart-utm-preset-item h3 {
+	margin: 0 0 5px 0;
+	font-size: 16px;
+}
+
+.smart-utm-preset-item .preset-params {
+	font-size: 12px;
+	color: var(--smart-utm-text-light);
+	font-family: monospace;
+}
+
+.smart-utm-preset-item .preset-actions {
+	display: flex;
+	gap: 5px;
+}
+
+.smart-utm-preset-editor {
+	background: white;
+	border: 1px solid var(--smart-utm-border);
+	border-radius: 8px;
+	padding: 20px;
+	margin: 20px 0;
+}
+
+/* Loading State */
+.smart-utm-dashboard .loading {
+	text-align: center;
+	padding: 40px;
+	color: var(--smart-utm-text-light);
+}
+
+/* Empty State */
+.smart-utm-empty {
+	text-align: center;
+	padding: 60px 20px;
+	color: var(--smart-utm-text-light);
+}
+
+.smart-utm-empty::before {
+	content: '🔗';
+	font-size: 48px;
+	display: block;
+	margin-bottom: 15px;
+}
+
+/* Settings Page */
+.smart-utm-settings .form-table th {
+	width: 250px;
+	font-weight: 500;
+}
+
+.smart-utm-settings input[type="checkbox"] {
+	margin-right: 8px;
+}
+
+.smart-utm-settings select,
+.smart-utm-settings input[type="text"],
+.smart-utm-settings input[type="url"],
+.smart-utm-settings textarea {
+	border-radius: 6px;
+	border: 1px solid var(--smart-utm-border);
+	padding: 8px 12px;
+}
+
+/* Responsive */
+@media (max-width: 782px) {
+	.smart-utm-bulk-actions {
+		flex-direction: column;
+	}
+
+	.smart-utm-filters {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.smart-utm-dashboard table {
+		font-size: 12px;
+	}
+
+	.smart-utm-dashboard .utm-url {
+		max-width: 200px;
+	}
+}
+
+/* iOS-inspired elements */
+.smart-utm-dashboard,
+.smart-utm-templates,
+.smart-utm-presets {
+	background: #f9f9f9;
+	padding: 20px;
+	border-radius: 12px;
+}
+
+.smart-utm-dashboard h1,
+.smart-utm-templates h1,
+.smart-utm-presets h1 {
+	font-weight: 600;
+	margin-bottom: 25px;
+	color: var(--smart-utm-text);
+}
+
+/* Button styles */
+.button-primary {
+	background: var(--smart-utm-primary);
+	border-color: var(--smart-utm-primary);
+	border-radius: 6px;
+	font-weight: 500;
+}
+
+.button-primary:hover {
+	background: #135e96;
+	border-color: #135e96;
+}
+

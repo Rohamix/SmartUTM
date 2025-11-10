@@ -3,7 +3,7 @@
  * Plugin Name: SmartUTM Builder
  * Plugin URI: https://rohamhub.info
  * Description: A professional WordPress plugin that automatically generates, manages, and tracks UTM links for all site pages, posts, and campaigns. It ensures consistent and accurate campaign tagging across all marketing channels — built for efficiency, privacy, and performance.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Roham Parsa
  * Author URI: https://rohamhub.info
  * License: Private - Internal Use Only
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin version and paths - keeping these handy for later use
-define( 'SMART_UTM_VERSION', '1.2.0' );
+define( 'SMART_UTM_VERSION', '1.3.0' );
 define( 'SMART_UTM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SMART_UTM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'SMART_UTM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );

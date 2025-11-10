@@ -3,7 +3,7 @@ Contributors: rohamparsa
 Tags: utm, marketing, tracking, analytics, links, campaigns
 Requires at least: 6.0
 Tested up to: 6.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 Requires PHP: 8.1
 License: Private - Internal Use Only
 License URI: https://rohamhub.info

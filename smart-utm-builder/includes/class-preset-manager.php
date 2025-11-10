@@ -129,6 +129,8 @@ class Smart_UTM_Preset_Manager {
 	 * @return array|null Preset data or null if not found
 	 */
 	public function get_preset( string $preset_id ) {
+		// Sanitize preset ID before lookup
+		$preset_id = sanitize_key( $preset_id );
 		$presets = $this->get_presets();
 		return isset( $presets[ $preset_id ] ) ? $presets[ $preset_id ] : null;
 	}
@@ -144,6 +146,12 @@ class Smart_UTM_Preset_Manager {
 	 * @return bool True if saved successfully
 	 */
 	public function update_preset( string $preset_id, array $preset ): bool {
+		// Sanitize preset ID to prevent injection
+		$preset_id = sanitize_key( $preset_id );
+		if ( empty( $preset_id ) ) {
+			return false;
+		}
+
 		$presets = $this->get_presets();
 		$presets[ $preset_id ] = $this->sanitize_preset( $preset );
 		return update_option( $this->option_name, $presets );
@@ -159,6 +167,12 @@ class Smart_UTM_Preset_Manager {
 	 * @return bool True if deleted successfully, false if preset didn't exist
 	 */
 	public function delete_preset( string $preset_id ): bool {
+		// Sanitize preset ID
+		$preset_id = sanitize_key( $preset_id );
+		if ( empty( $preset_id ) ) {
+			return false;
+		}
+
 		$presets = $this->get_presets();
 		if ( isset( $presets[ $preset_id ] ) ) {
 			unset( $presets[ $preset_id ] );

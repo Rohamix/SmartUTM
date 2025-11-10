@@ -95,8 +95,11 @@ class Smart_UTM_Generator {
 
 		// Check if we should generate on publish (vs. on every save)
 		// Some people like to save 47 times before publishing, we respect that
-		if ( ! get_option( 'smart_utm_generate_on_publish', true ) ) {
-			return;
+		if ( get_option( 'smart_utm_generate_on_publish', true ) ) {
+			// Only generate for published posts if this option is enabled
+			if ( 'publish' !== get_post_status( $post_id ) ) {
+				return;
+			}
 		}
 
 		// Make sure this post type is enabled
@@ -132,9 +135,20 @@ class Smart_UTM_Generator {
 		// It's like making multiple versions of the same recipe with different spices
 		$preset_manager = Smart_UTM_Preset_Manager::get_instance();
 		$presets        = $preset_manager->get_presets();
-		$generated      = array();
+
+		// No presets? Nothing to generate
+		if ( empty( $presets ) ) {
+			return array();
+		}
+
+		$generated = array();
 
 		foreach ( $presets as $preset_id => $preset ) {
+			// Validate preset structure before processing
+			if ( ! is_array( $preset ) || empty( $preset ) ) {
+				continue;
+			}
+
 			$utm_url = $this->build_utm_url( $post, $preset );
 			if ( $utm_url ) {
 				$generated[ $preset_id ] = array(
@@ -168,6 +182,11 @@ class Smart_UTM_Generator {
 	 * @return string|null Complete UTM URL or null if something went wrong
 	 */
 	public function build_utm_url( WP_Post $post, array $preset ) {
+		// Validate preset is actually an array
+		if ( ! is_array( $preset ) || empty( $preset ) ) {
+			return null;
+		}
+
 		$base_url = get_permalink( $post->ID );
 		if ( ! $base_url ) {
 			// Can't build a URL without a base URL - that's like trying to make coffee without water
@@ -197,7 +216,16 @@ class Smart_UTM_Generator {
 		// Because some URLs are like Russian nesting dolls - URLs within URLs
 		$separator = strpos( $base_url, '?' ) !== false ? '&' : '?';
 		$query_string = http_build_query( $utm_params );
-		return $base_url . $separator . $query_string;
+		$final_url = $base_url . $separator . $query_string;
+
+		// Validate the final URL before returning
+		if ( ! filter_var( $final_url, FILTER_VALIDATE_URL ) ) {
+			// Something went wrong - log it and return null
+			error_log( 'SmartUTM: Invalid URL generated for post ' . $post->ID . ': ' . $final_url );
+			return null;
+		}
+
+		return $final_url;
 	}
 
 	/**
@@ -216,20 +244,25 @@ class Smart_UTM_Generator {
 	private function replace_placeholders( string $template, WP_Post $post ): string {
 		// Map placeholders to their actual values
 		// This is where we turn {magic_words} into real data
+		$post_slug = ! empty( $post->post_name ) ? $post->post_name : 'post-' . $post->ID;
+		$post_title = ! empty( $post->post_title ) ? sanitize_title( $post->post_title ) : 'untitled';
+		$author_nicename = get_the_author_meta( 'user_nicename', $post->post_author );
+		$author_nicename = ! empty( $author_nicename ) ? $author_nicename : 'unknown';
+
 		$replacements = array(
 			'{source}'     => 'website',
 			'{medium}'     => 'organic',
 			'{category}'   => $this->get_post_category( $post ),
 			'{year}'       => date( 'Y' ), // Current year, because time travel isn't a thing yet
-			'{post_slug}'  => $post->post_name,
-			'{post_title}' => sanitize_title( $post->post_title ),
+			'{post_slug}'  => $post_slug,
+			'{post_title}' => $post_title,
 			'{post_id}'    => $post->ID,
-			'{author}'     => get_the_author_meta( 'user_nicename', $post->post_author ),
+			'{author}'     => $author_nicename,
 		);
 
 		$result = $template;
 		foreach ( $replacements as $placeholder => $replacement ) {
-			$result = str_replace( $placeholder, $replacement, $result );
+			$result = str_replace( $placeholder, (string) $replacement, $result );
 		}
 
 		// Clean up the result before returning - because nobody likes dirty URLs
@@ -247,12 +280,16 @@ class Smart_UTM_Generator {
 	 */
 	private function get_post_category( WP_Post $post ): string {
 		$categories = get_the_category( $post->ID );
-		if ( ! empty( $categories ) ) {
-			// Just grab the first one - we're not picky
-			return $categories[0]->slug;
+		// Check if get_the_category returned an error or empty array
+		if ( is_wp_error( $categories ) || empty( $categories ) || ! is_array( $categories ) ) {
+			return 'uncategorized';
 		}
-		// The catch-all category for posts that don't fit anywhere
-		return 'uncategorized';
+		// Validate that the first category has a slug property
+		if ( ! isset( $categories[0]->slug ) || empty( $categories[0]->slug ) ) {
+			return 'uncategorized';
+		}
+		// Just grab the first one - we're not picky
+		return $categories[0]->slug;
 	}
 
 	/**
@@ -264,7 +301,12 @@ class Smart_UTM_Generator {
 	 * @return array UTM links indexed by preset ID
 	 */
 	public function get_utm_links( int $post_id ): array {
-		return get_post_meta( $post_id, $this->meta_key, true ) ?: array();
+		$meta = get_post_meta( $post_id, $this->meta_key, true );
+		// Ensure we always return an array, even if meta is corrupted
+		if ( ! is_array( $meta ) ) {
+			return array();
+		}
+		return $meta;
 	}
 
 	/**
@@ -279,7 +321,17 @@ class Smart_UTM_Generator {
 	 * @return bool True if updated successfully
 	 */
 	public function update_utm_link( int $post_id, string $preset_id, string $utm_url ): bool {
+		// Validate inputs
+		if ( empty( $preset_id ) || empty( $utm_url ) ) {
+			return false;
+		}
+
 		$links = $this->get_utm_links( $post_id );
+		// Ensure links is an array
+		if ( ! is_array( $links ) ) {
+			$links = array();
+		}
+
 		$links[ $preset_id ] = array(
 			'url'      => esc_url_raw( $utm_url ),
 			'preset'   => $preset_id,
@@ -300,7 +352,17 @@ class Smart_UTM_Generator {
 	 * @return bool True if deleted successfully
 	 */
 	public function delete_utm_link( int $post_id, string $preset_id ): bool {
+		// Validate inputs
+		if ( empty( $preset_id ) ) {
+			return false;
+		}
+
 		$links = $this->get_utm_links( $post_id );
+		// Ensure links is an array
+		if ( ! is_array( $links ) ) {
+			return false;
+		}
+
 		if ( isset( $links[ $preset_id ] ) ) {
 			unset( $links[ $preset_id ] );
 			// If no links left, remove the meta entirely
@@ -357,6 +419,11 @@ class Smart_UTM_Generator {
 		$preset_manager = Smart_UTM_Preset_Manager::get_instance();
 		$presets = $preset_manager->get_presets();
 
+		// Validate presets is an array
+		if ( ! is_array( $presets ) ) {
+			$presets = array();
+		}
+
 		// If no links exist yet, show a generate button
 		// Because empty boxes are sad boxes
 		if ( empty( $utm_links ) ) {
@@ -369,8 +436,20 @@ class Smart_UTM_Generator {
 		// Because copying URLs manually is so 2010
 		echo '<div class="smart-utm-meta-box-links">';
 		foreach ( $utm_links as $preset_id => $link_data ) {
-			$preset_name = isset( $presets[ $preset_id ] ) ? $presets[ $preset_id ]['name'] : $preset_id;
-			$utm_url = $link_data['url'] ?? '';
+			// Validate link_data structure
+			if ( ! is_array( $link_data ) ) {
+				continue;
+			}
+
+			$preset_name = isset( $presets[ $preset_id ] ) && is_array( $presets[ $preset_id ] ) && isset( $presets[ $preset_id ]['name'] ) 
+				? $presets[ $preset_id ]['name'] 
+				: $preset_id;
+			$utm_url = isset( $link_data['url'] ) ? (string) $link_data['url'] : '';
+			
+			// Skip if URL is empty
+			if ( empty( $utm_url ) ) {
+				continue;
+			}
 			?>
 			<div class="smart-utm-link-item" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
 				<strong><?php echo esc_html( $preset_name ); ?></strong>

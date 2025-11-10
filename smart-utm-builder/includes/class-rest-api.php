@@ -83,6 +83,9 @@ class Smart_UTM_REST_API {
 						'search'   => array(
 							'sanitize_callback' => 'sanitize_text_field',
 						),
+						'preset'   => array(
+							'sanitize_callback' => 'sanitize_text_field',
+						),
 					),
 				),
 				array(
@@ -207,6 +210,7 @@ class Smart_UTM_REST_API {
 		$page     = $request->get_param( 'page' );
 		$per_page = $request->get_param( 'per_page' );
 		$search   = $request->get_param( 'search' );
+		$preset_filter = $request->get_param( 'preset' );
 
 		$post_types = array();
 		if ( get_option( 'smart_utm_include_posts', true ) ) {
@@ -214,6 +218,17 @@ class Smart_UTM_REST_API {
 		}
 		if ( get_option( 'smart_utm_include_pages', true ) ) {
 			$post_types[] = 'page';
+		}
+
+		// Can't query if no post types enabled
+		if ( empty( $post_types ) ) {
+			return new WP_REST_Response(
+				array(
+					'links' => array(),
+					'total' => 0,
+				),
+				200
+			);
 		}
 
 		$query_args = array(
@@ -238,24 +253,49 @@ class Smart_UTM_REST_API {
 
 		foreach ( $query->posts as $post ) {
 			$utm_links = get_post_meta( $post->ID, '_utm_link', true );
-			if ( $utm_links && is_array( $utm_links ) ) {
-				foreach ( $utm_links as $preset_id => $link_data ) {
-					$links[] = array(
-						'id'          => $post->ID,
-						'post_title'  => $post->post_title,
-						'original_url' => get_permalink( $post->ID ),
-						'utm_url'     => $link_data['url'] ?? '',
-						'preset'      => $preset_id,
-						'created'     => $link_data['created'] ?? '',
-					);
+			// Validate that we got an array back
+			if ( ! is_array( $utm_links ) || empty( $utm_links ) ) {
+				continue;
+			}
+
+			foreach ( $utm_links as $preset_id => $link_data ) {
+				// Filter by preset if specified
+				if ( $preset_filter && $preset_id !== $preset_filter ) {
+					continue;
 				}
+
+				// Validate link_data is an array
+				if ( ! is_array( $link_data ) ) {
+					continue;
+				}
+
+				$permalink = get_permalink( $post->ID );
+				// Skip if permalink generation failed
+				if ( ! $permalink ) {
+					continue;
+				}
+
+				$links[] = array(
+					'id'          => $post->ID,
+					'post_title'  => $post->post_title ?: __( '(No Title)', 'smart-utm-builder' ),
+					'original_url' => $permalink,
+					'utm_url'     => isset( $link_data['url'] ) ? (string) $link_data['url'] : '',
+					'preset'      => $preset_id,
+					'created'     => isset( $link_data['created'] ) ? (string) $link_data['created'] : '',
+				);
 			}
 		}
+
+		// Clean up after ourselves - good housekeeping
+		wp_reset_postdata();
+
+		// Sort links if needed (client-side sorting for now)
+		// Could be moved to server-side for better performance with large datasets
 
 		return new WP_REST_Response(
 			array(
 				'links' => $links,
-				'total' => $query->found_posts,
+				'total' => count( $links ), // Return actual filtered count
 			),
 			200
 		);
@@ -275,6 +315,16 @@ class Smart_UTM_REST_API {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid post ID.', 'smart-utm-builder' ) ), 400 );
 		}
 
+		// Verify post exists and user can edit it
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return new WP_REST_Response( array( 'message' => __( 'Post not found.', 'smart-utm-builder' ) ), 404 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Insufficient permissions.', 'smart-utm-builder' ) ), 403 );
+		}
+
 		$generator = Smart_UTM_Generator::get_instance();
 		$result    = $generator->generate_for_post( $post_id );
 
@@ -289,11 +339,26 @@ class Smart_UTM_REST_API {
 	 */
 	public function update_link( WP_REST_Request $request ): WP_REST_Response {
 		$post_id   = absint( $request->get_param( 'id' ) );
-		$preset_id = sanitize_text_field( $request->get_param( 'preset' ) );
+		$preset_id = sanitize_key( $request->get_param( 'preset' ) );
 		$utm_url   = $request->get_param( 'utm_url' );
 
 		if ( ! $post_id || ! $preset_id || ! $utm_url ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid parameters.', 'smart-utm-builder' ) ), 400 );
+		}
+
+		// Verify post exists and user can edit it
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return new WP_REST_Response( array( 'message' => __( 'Post not found.', 'smart-utm-builder' ) ), 404 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Insufficient permissions.', 'smart-utm-builder' ) ), 403 );
+		}
+
+		// Validate URL format
+		if ( ! filter_var( $utm_url, FILTER_VALIDATE_URL ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Invalid URL format.', 'smart-utm-builder' ) ), 400 );
 		}
 
 		$generator = Smart_UTM_Generator::get_instance();
@@ -314,10 +379,20 @@ class Smart_UTM_REST_API {
 	 */
 	public function delete_link( WP_REST_Request $request ): WP_REST_Response {
 		$post_id   = absint( $request->get_param( 'id' ) );
-		$preset_id = sanitize_text_field( $request->get_param( 'preset' ) );
+		$preset_id = sanitize_key( $request->get_param( 'preset' ) );
 
 		if ( ! $post_id || ! $preset_id ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid parameters.', 'smart-utm-builder' ) ), 400 );
+		}
+
+		// Verify post exists and user can edit it
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return new WP_REST_Response( array( 'message' => __( 'Post not found.', 'smart-utm-builder' ) ), 404 );
+		}
+
+		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Insufficient permissions.', 'smart-utm-builder' ) ), 403 );
 		}
 
 		$generator = Smart_UTM_Generator::get_instance();
@@ -341,6 +416,11 @@ class Smart_UTM_REST_API {
 
 		if ( ! in_array( $action, array( 'generate_all', 'refresh_all', 'delete_all' ), true ) ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid action.', 'smart-utm-builder' ) ), 400 );
+		}
+
+		// Check if user has permission for bulk operations
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Insufficient permissions for bulk operations.', 'smart-utm-builder' ) ), 403 );
 		}
 
 		$processor = Smart_UTM_Bulk_Processor::get_instance();
@@ -396,7 +476,11 @@ class Smart_UTM_REST_API {
 	 * @return WP_REST_Response Response object.
 	 */
 	public function get_preset( WP_REST_Request $request ): WP_REST_Response {
-		$preset_id = sanitize_text_field( $request->get_param( 'id' ) );
+		$preset_id = sanitize_key( $request->get_param( 'id' ) );
+		if ( empty( $preset_id ) ) {
+			return new WP_REST_Response( array( 'message' => __( 'Invalid preset ID.', 'smart-utm-builder' ) ), 400 );
+		}
+
 		$manager   = Smart_UTM_Preset_Manager::get_instance();
 		$preset    = $manager->get_preset( $preset_id );
 
@@ -415,10 +499,10 @@ class Smart_UTM_REST_API {
 	 */
 	public function create_preset( WP_REST_Request $request ): WP_REST_Response {
 		$data      = $request->get_json_params();
-		$preset_id = sanitize_text_field( $data['id'] ?? '' );
+		$preset_id = sanitize_key( $data['id'] ?? '' );
 		$preset    = $data['preset'] ?? array();
 
-		if ( ! $preset_id || empty( $preset ) ) {
+		if ( empty( $preset_id ) || empty( $preset ) ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid parameters.', 'smart-utm-builder' ) ), 400 );
 		}
 
@@ -435,10 +519,10 @@ class Smart_UTM_REST_API {
 	 * @return WP_REST_Response Response object.
 	 */
 	public function update_preset( WP_REST_Request $request ): WP_REST_Response {
-		$preset_id = sanitize_text_field( $request->get_param( 'id' ) );
+		$preset_id = sanitize_key( $request->get_param( 'id' ) );
 		$preset    = $request->get_json_params();
 
-		if ( ! $preset_id || empty( $preset ) ) {
+		if ( empty( $preset_id ) || empty( $preset ) ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid parameters.', 'smart-utm-builder' ) ), 400 );
 		}
 
@@ -455,9 +539,9 @@ class Smart_UTM_REST_API {
 	 * @return WP_REST_Response Response object.
 	 */
 	public function delete_preset( WP_REST_Request $request ): WP_REST_Response {
-		$preset_id = sanitize_text_field( $request->get_param( 'id' ) );
+		$preset_id = sanitize_key( $request->get_param( 'id' ) );
 
-		if ( ! $preset_id ) {
+		if ( empty( $preset_id ) ) {
 			return new WP_REST_Response( array( 'message' => __( 'Invalid preset ID.', 'smart-utm-builder' ) ), 400 );
 		}
 

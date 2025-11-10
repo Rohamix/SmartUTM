@@ -69,6 +69,12 @@ class Smart_UTM_QR_Generator {
 	 * @return string|false QR code image URL or false on failure
 	 */
 	public function generate( string $url, string $label = '' ) {
+		// Validate URL before generating QR code
+		if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+			error_log( 'SmartUTM QR: Invalid URL provided: ' . $url );
+			return false;
+		}
+
 		// Google Charts API is free and doesn't require authentication
 		$size = $this->size;
 		$encoded_url = urlencode( $url );
@@ -114,12 +120,24 @@ class Smart_UTM_QR_Generator {
 		$qr_dir     = $upload_dir['basedir'] . '/smart-utm-qr';
 		if ( ! file_exists( $qr_dir ) ) {
 			wp_mkdir_p( $qr_dir );
+			// Set proper permissions
+			@chmod( $qr_dir, 0755 );
 		}
 
-		$filename = "qr-{$post_id}-{$preset_id}.png";
+		$filename = sanitize_file_name( "qr-{$post_id}-{$preset_id}.png" );
 		$filepath = $qr_dir . '/' . $filename;
 
+		// Validate file path to prevent directory traversal
+		$real_qr_dir = realpath( $qr_dir );
+		$real_filepath = realpath( dirname( $filepath ) );
+		if ( $real_filepath !== $real_qr_dir ) {
+			error_log( 'SmartUTM QR: Invalid file path detected' );
+			return false;
+		}
+
 		if ( file_put_contents( $filepath, $image_data ) ) {
+			// Set proper file permissions
+			@chmod( $filepath, 0644 );
 			return $upload_dir['baseurl'] . '/smart-utm-qr/' . $filename;
 		}
 
@@ -132,7 +150,11 @@ class Smart_UTM_QR_Generator {
 	 * Called from admin when user wants to generate a QR code
 	 */
 	public function ajax_generate_qr() {
-		check_ajax_referer( 'smart_utm_qr', 'nonce' );
+		// Check nonce - but the nonce name needs to match what's sent from JS
+		// Using wp_rest nonce since this is called via REST API context
+		if ( ! check_ajax_referer( 'wp_rest', 'nonce', false ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'smart-utm-builder' ) ) );
+		}
 
 		if ( ! current_user_can( 'edit_posts' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Insufficient permissions.', 'smart-utm-builder' ) ) );
@@ -142,7 +164,7 @@ class Smart_UTM_QR_Generator {
 		$post_id  = absint( $_POST['post_id'] ?? 0 );
 		$preset_id = sanitize_text_field( $_POST['preset_id'] ?? '' );
 
-		if ( ! $url ) {
+		if ( ! $url || ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid URL.', 'smart-utm-builder' ) ) );
 		}
 

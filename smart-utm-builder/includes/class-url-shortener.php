@@ -76,6 +76,12 @@ class Smart_UTM_URL_Shortener {
 	 * @return string|false Shortened URL or false if something went wrong
 	 */
 	public function shorten( string $url ) {
+		// Validate input URL first
+		if ( ! filter_var( $url, FILTER_VALIDATE_URL ) ) {
+			error_log( 'SmartUTM: Invalid URL provided for shortening: ' . $url );
+			return false;
+		}
+
 		$service = get_option( 'smart_utm_shortener_service', '' );
 		if ( ! $service ) {
 			// No service configured? Can't shorten what we don't have
@@ -145,11 +151,27 @@ class Smart_UTM_URL_Shortener {
 
 		if ( is_wp_error( $response ) ) {
 			// Something went wrong - log it and return false
+			error_log( 'SmartUTM Bitly API Error: ' . $response->get_error_message() );
+			return false;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			// API returned an error status
+			error_log( 'SmartUTM Bitly API Error: HTTP ' . $status_code );
 			return false;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
-		return $body['link'] ?? false;
+		$shortened = $body['link'] ?? false;
+
+		// Validate shortened URL before returning
+		if ( $shortened && ! filter_var( $shortened, FILTER_VALIDATE_URL ) ) {
+			error_log( 'SmartUTM Bitly: Invalid URL returned: ' . $shortened );
+			return false;
+		}
+
+		return $shortened;
 	}
 
 	/**
@@ -180,12 +202,27 @@ class Smart_UTM_URL_Shortener {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			error_log( 'SmartUTM Rebrandly API Error: ' . $response->get_error_message() );
+			return false;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			error_log( 'SmartUTM Rebrandly API Error: HTTP ' . $status_code );
 			return false;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		// Rebrandly returns shortUrl without https://, so we add it
-		return isset( $body['shortUrl'] ) ? 'https://' . $body['shortUrl'] : false;
+		$shortened = isset( $body['shortUrl'] ) ? 'https://' . $body['shortUrl'] : false;
+
+		// Validate shortened URL before returning
+		if ( $shortened && ! filter_var( $shortened, FILTER_VALIDATE_URL ) ) {
+			error_log( 'SmartUTM Rebrandly: Invalid URL returned: ' . $shortened );
+			return false;
+		}
+
+		return $shortened;
 	}
 
 	/**
@@ -220,11 +257,26 @@ class Smart_UTM_URL_Shortener {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			error_log( 'SmartUTM Custom Shortener API Error: ' . $response->get_error_message() );
+			return false;
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			error_log( 'SmartUTM Custom Shortener API Error: HTTP ' . $status_code );
 			return false;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		// Try common response field names - because APIs are inconsistent
-		return $body['short_url'] ?? $body['shortUrl'] ?? false;
+		$shortened = $body['short_url'] ?? $body['shortUrl'] ?? false;
+
+		// Validate shortened URL before returning
+		if ( $shortened && ! filter_var( $shortened, FILTER_VALIDATE_URL ) ) {
+			error_log( 'SmartUTM Custom Shortener: Invalid URL returned: ' . $shortened );
+			return false;
+		}
+
+		return $shortened;
 	}
 }

@@ -36,15 +36,20 @@
 			// If we're not on the dashboard page, don't bother
 			if (!$('#smart-utm-links-tbody').length) return;
 
+			this.loadPresetsForFilter();
 			this.loadLinks();
 			this.initSearch();
 			this.initSorting();
 			this.initCopyButtons();
+			this.initPresetFilter();
 		},
 
 		// Load UTM links from the API
 		// Like ordering food, but for URLs
 		loadLinks: function() {
+			// Show loading state
+			$('#smart-utm-links-tbody').html('<tr><td colspan="6" class="loading">Loading...</td></tr>');
+
 			const params = {
 				page: this.currentPage,
 				per_page: this.perPage,
@@ -53,6 +58,11 @@
 			// Add search if user is actually searching for something
 			if (this.currentSearch) {
 				params.search = this.currentSearch;
+			}
+
+			// Add preset filter if one is selected
+			if (this.currentPreset) {
+				params.preset = this.currentPreset;
 			}
 
 			$.ajax({
@@ -64,13 +74,55 @@
 					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
 				},
 				success: function(response) {
-					SmartUTM.renderLinks(response.links);
-					SmartUTM.renderPagination(response.total);
+					if (response && response.links) {
+						// Sort links client-side (since we're filtering by preset client-side too)
+						const sortedLinks = SmartUTM.sortLinks(response.links);
+						SmartUTM.renderLinks(sortedLinks);
+						SmartUTM.renderPagination(response.total);
+					} else {
+						$('#smart-utm-links-tbody').html('<tr><td colspan="6" class="smart-utm-empty">No links found</td></tr>');
+					}
 				},
-				error: function() {
+				error: function(xhr) {
 					// Something went wrong - show a friendly error message
 					// Because error messages don't have to be scary
-					$('#smart-utm-links-tbody').html('<tr><td colspan="6" class="smart-utm-empty">Error loading links. Maybe try refreshing?</td></tr>');
+					let errorMsg = 'Error loading links. Maybe try refreshing?';
+					if (xhr.responseJSON && xhr.responseJSON.message) {
+						errorMsg = SmartUTM.escapeHtml(xhr.responseJSON.message);
+					}
+					$('#smart-utm-links-tbody').html('<tr><td colspan="6" class="smart-utm-empty">' + errorMsg + '</td></tr>');
+				}
+			});
+		},
+
+		// Sort links client-side
+		// Because sometimes you want things in a specific order
+		sortLinks: function(links) {
+			if (!links || links.length === 0) return links;
+
+			const field = this.currentSort.field;
+			const order = this.currentSort.order;
+
+			return links.sort(function(a, b) {
+				let aVal = a[field] || '';
+				let bVal = b[field] || '';
+
+				// Handle date sorting
+				if (field === 'created') {
+					aVal = new Date(aVal).getTime() || 0;
+					bVal = new Date(bVal).getTime() || 0;
+				}
+
+				// Handle string comparison
+				if (typeof aVal === 'string') {
+					aVal = aVal.toLowerCase();
+					bVal = bVal.toLowerCase();
+				}
+
+				if (order === 'asc') {
+					return aVal > bVal ? 1 : (aVal < bVal ? -1 : 0);
+				} else {
+					return aVal < bVal ? 1 : (aVal > bVal ? -1 : 0);
 				}
 			});
 		},
@@ -147,6 +199,45 @@
 			});
 		},
 
+		// Initialize preset filter dropdown
+		initPresetFilter: function() {
+			const filterSelect = $('#smart-utm-filter-preset');
+			if (!filterSelect.length) return;
+
+			filterSelect.on('change', function() {
+				SmartUTM.currentPreset = $(this).val();
+				SmartUTM.currentPage = 1; // Reset to first page when filtering
+				SmartUTM.loadLinks();
+			});
+		},
+
+		// Load presets for the filter dropdown
+		loadPresetsForFilter: function() {
+			const filterSelect = $('#smart-utm-filter-preset');
+			if (!filterSelect.length) return;
+
+			$.ajax({
+				url: this.apiUrl + 'presets',
+				method: 'GET',
+				beforeSend: function(xhr) {
+					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
+				},
+				success: function(response) {
+					if (response && response.presets) {
+						let html = '<option value="">All Channels</option>';
+						Object.keys(response.presets).forEach(function(presetId) {
+							const preset = response.presets[presetId];
+							html += '<option value="' + SmartUTM.escapeHtml(presetId) + '">' + SmartUTM.escapeHtml(preset.name || presetId) + '</option>';
+						});
+						filterSelect.html(html);
+					}
+				},
+				error: function() {
+					// Silently fail - filter will just show "All Channels"
+				}
+			});
+		},
+
 		// Initialize table sorting
 		// Makes columns clickable and sortable - because clicking things is fun
 		initSorting: function() {
@@ -207,29 +298,57 @@
 		// Initialize link action buttons (edit/delete)
 		initLinkActions: function() {
 			$('.smart-utm-edit-link').on('click', function() {
-				const postId = $(this).data('post-id');
+				const postId = parseInt($(this).data('post-id'), 10);
 				const preset = $(this).data('preset');
-				const newUrl = prompt('Enter new UTM URL:');
-				if (newUrl) {
-					SmartUTM.updateLink(postId, preset, newUrl);
+				
+				// Validate inputs
+				if (!postId || postId <= 0 || !preset) {
+					alert('Invalid parameters. Please refresh the page.');
+					return;
+				}
+
+				const currentUrl = $(this).closest('tr').find('.utm-url-text').text();
+				const newUrl = prompt('Enter new UTM URL:', currentUrl);
+				
+				if (newUrl && newUrl.trim()) {
+					// Basic URL validation
+					try {
+						new URL(newUrl.trim());
+						SmartUTM.updateLink(postId, preset, newUrl.trim());
+					} catch (e) {
+						alert('Please enter a valid URL.');
+					}
 				}
 			});
 
 			$('.smart-utm-delete-link').on('click', function() {
 				// Double-check before deleting - because accidents happen
 				if (!confirm('Are you sure you want to delete this UTM link?')) return;
-				const postId = $(this).data('post-id');
+				const postId = parseInt($(this).data('post-id'), 10);
 				const preset = $(this).data('preset');
+				
+				// Validate inputs
+				if (!postId || postId <= 0 || !preset) {
+					alert('Invalid parameters. Please refresh the page.');
+					return;
+				}
+				
 				SmartUTM.deleteLink(postId, preset);
 			});
 		},
 
 		// Update a UTM link
 		updateLink: function(postId, preset, url) {
+			// Additional validation
+			if (!url || !url.trim()) {
+				alert('Please enter a valid URL.');
+				return;
+			}
+
 			$.ajax({
-				url: this.apiUrl + 'links/' + postId + '/' + preset,
+				url: this.apiUrl + 'links/' + postId + '/' + encodeURIComponent(preset),
 				method: 'POST',
-				data: { utm_url: url },
+				data: { utm_url: url.trim() },
 				beforeSend: function(xhr) {
 					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
 				},
@@ -237,8 +356,12 @@
 					SmartUTM.loadLinks();
 					alert('UTM link updated successfully! 🎉');
 				},
-				error: function() {
-					alert('Error updating UTM link. Maybe try again?');
+				error: function(xhr) {
+					let errorMsg = 'Error updating UTM link. Maybe try again?';
+					if (xhr.responseJSON && xhr.responseJSON.message) {
+						errorMsg = xhr.responseJSON.message;
+					}
+					alert(errorMsg);
 				}
 			});
 		},
@@ -246,7 +369,7 @@
 		// Delete a UTM link
 		deleteLink: function(postId, preset) {
 			$.ajax({
-				url: this.apiUrl + 'links/' + postId + '/' + preset,
+				url: this.apiUrl + 'links/' + postId + '/' + encodeURIComponent(preset),
 				method: 'DELETE',
 				beforeSend: function(xhr) {
 					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
@@ -254,8 +377,12 @@
 				success: function() {
 					SmartUTM.loadLinks();
 				},
-				error: function() {
-					alert('Error deleting UTM link. The link is being stubborn.');
+				error: function(xhr) {
+					let errorMsg = 'Error deleting UTM link. The link is being stubborn.';
+					if (xhr.responseJSON && xhr.responseJSON.message) {
+						errorMsg = xhr.responseJSON.message;
+					}
+					alert(errorMsg);
 				}
 			});
 		},
@@ -432,15 +559,25 @@
 
 		// Edit a preset
 		editPreset: function(id) {
+			// Validate and encode preset ID
+			if (!id) {
+				alert('Invalid preset ID.');
+				return;
+			}
+			
 			$.ajax({
-				url: this.apiUrl + 'presets/' + id,
+				url: this.apiUrl + 'presets/' + encodeURIComponent(id),
 				method: 'GET',
 				beforeSend: function(xhr) {
 					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
 				},
 				success: function(response) {
 					const preset = response.preset;
-					$('#preset_id').val(id);
+					if (!preset) {
+						alert('Preset not found.');
+						return;
+					}
+					$('#preset_id').val(SmartUTM.escapeHtml(id));
 					$('#preset_name').val(preset.name || '');
 					$('#preset_utm_source').val(preset.utm_source || '');
 					$('#preset_utm_medium').val(preset.utm_medium || '');
@@ -448,8 +585,12 @@
 					$('#preset_utm_content').val(preset.utm_content || '');
 					SmartUTM.showPresetEditor(id);
 				},
-				error: function() {
-					alert('Error loading preset. Maybe it doesn\'t exist?');
+				error: function(xhr) {
+					let errorMsg = 'Error loading preset. Maybe it doesn\'t exist?';
+					if (xhr.responseJSON && xhr.responseJSON.message) {
+						errorMsg = xhr.responseJSON.message;
+					}
+					alert(errorMsg);
 				}
 			});
 		},
@@ -487,8 +628,14 @@
 
 		// Delete preset
 		deletePreset: function(id) {
+			// Validate and encode preset ID
+			if (!id) {
+				alert('Invalid preset ID.');
+				return;
+			}
+			
 			$.ajax({
-				url: this.apiUrl + 'presets/' + id,
+				url: this.apiUrl + 'presets/' + encodeURIComponent(id),
 				method: 'DELETE',
 				beforeSend: function(xhr) {
 					xhr.setRequestHeader('X-WP-Nonce', SmartUTM.nonce);
@@ -496,8 +643,12 @@
 				success: function() {
 					SmartUTM.loadPresets();
 				},
-				error: function() {
-					alert('Error deleting preset. It might be in use somewhere.');
+				error: function(xhr) {
+					let errorMsg = 'Error deleting preset. It might be in use somewhere.';
+					if (xhr.responseJSON && xhr.responseJSON.message) {
+						errorMsg = xhr.responseJSON.message;
+					}
+					alert(errorMsg);
 				}
 			});
 		},

@@ -74,6 +74,14 @@ class Smart_UTM_Bulk_Processor {
 	 * @return array Result with success status and message
 	 */
 	public function process( string $action, array $args = array() ): array {
+		// Validate action first
+		if ( ! in_array( $action, array( 'generate_all', 'refresh_all', 'delete_all' ), true ) ) {
+			return array(
+				'success' => false,
+				'message' => __( 'Invalid action.', 'smart-utm-builder' ),
+			);
+		}
+
 		// Figure out which post types to process
 		// Because we're polite and respect user preferences
 		$post_types = array();
@@ -95,16 +103,21 @@ class Smart_UTM_Bulk_Processor {
 
 		// Get all published posts/pages
 		// Using 'fields' => 'ids' to save memory - we're eco-friendly like that
+		// Limit to reasonable number to prevent memory issues on huge sites
 		$query_args = array(
 			'post_type'      => $post_types,
 			'post_status'    => 'publish',
-			'posts_per_page' => -1, // Get everything - we're ambitious
+			'posts_per_page' => 10000, // Reasonable limit instead of -1
 			'fields'         => 'ids', // Just get IDs to save memory
+			'no_found_rows'  => true, // Skip counting total for performance
 		);
 
 		$query = new WP_Query( $query_args );
 		$post_ids = $query->posts;
 		$total = count( $post_ids );
+
+		// Clean up query
+		wp_reset_postdata();
 
 		if ( 0 === $total ) {
 			// No posts? That's... actually fine. Some sites are just getting started
@@ -122,6 +135,12 @@ class Smart_UTM_Bulk_Processor {
 
 		foreach ( $batches as $batch ) {
 			foreach ( $batch as $post_id ) {
+				// Validate post ID
+				$post_id = absint( $post_id );
+				if ( ! $post_id ) {
+					continue;
+				}
+
 				switch ( $action ) {
 					case 'generate_all':
 					case 'refresh_all':

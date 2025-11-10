@@ -38,8 +38,14 @@
 
 		// Generate now button - for when you want links RIGHT NOW
 		$(document).on('click', '.smart-utm-generate-now', function() {
-			const postId = $(this).data('post-id');
+			const postId = parseInt($(this).data('post-id'), 10);
 			const btn = $(this);
+
+			// Validate post ID
+			if (!postId || postId <= 0) {
+				alert('Invalid post ID. Please refresh the page and try again.');
+				return;
+			}
 
 			btn.prop('disabled', true).text('Generating...');
 
@@ -65,8 +71,14 @@
 
 		// Regenerate all button - for when you want fresh links
 		$(document).on('click', '.smart-utm-regenerate', function() {
-			const postId = $(this).data('post-id');
+			const postId = parseInt($(this).data('post-id'), 10);
 			const btn = $(this);
+
+			// Validate post ID
+			if (!postId || postId <= 0) {
+				alert('Invalid post ID. Please refresh the page and try again.');
+				return;
+			}
 
 			btn.prop('disabled', true).text('Regenerating...');
 

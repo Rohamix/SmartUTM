@@ -10,8 +10,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// Handle form submission.
-if ( isset( $_POST['smart_utm_settings'] ) && check_admin_referer( 'smart_utm_settings' ) ) {
+// Handle form submission - moved here to prevent header issues
+$settings_saved = false;
+if ( isset( $_POST['smart_utm_settings'] ) && check_admin_referer( 'smart_utm_settings' ) && current_user_can( 'manage_options' ) ) {
 	update_option( 'smart_utm_enable_auto_generate', isset( $_POST['enable_auto_generate'] ) ? 1 : 0 );
 	update_option( 'smart_utm_include_pages', isset( $_POST['include_pages'] ) ? 1 : 0 );
 	update_option( 'smart_utm_include_posts', isset( $_POST['include_posts'] ) ? 1 : 0 );
@@ -28,11 +29,17 @@ if ( isset( $_POST['smart_utm_settings'] ) && check_admin_referer( 'smart_utm_se
 	update_option( 'smart_utm_ga4_property_id', sanitize_text_field( $_POST['ga4_property_id'] ?? '' ) );
 	update_option( 'smart_utm_ga4_credentials', sanitize_textarea_field( $_POST['ga4_credentials'] ?? '' ) );
 
-	echo '<div class="notice notice-success"><p>' . esc_html__( 'Settings saved.', 'smart-utm-builder' ) . '</p></div>';
+	$settings_saved = true;
 }
 ?>
 <div class="wrap smart-utm-settings">
 	<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+
+	<?php if ( $settings_saved ) : ?>
+		<div class="notice notice-success is-dismissible">
+			<p><?php esc_html_e( 'Settings saved successfully!', 'smart-utm-builder' ); ?></p>
+		</div>
+	<?php endif; ?>
 
 	<form method="post" action="">
 		<?php wp_nonce_field( 'smart_utm_settings' ); ?>
